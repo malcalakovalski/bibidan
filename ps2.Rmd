@@ -1,0 +1,224 @@
+---
+title: "PS2"
+author: "Manuel Alcalá Kovalski"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman 
+    highlight: github
+    fig_width: 4
+    fig_height: 6
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  results = 'asis',
+  tidy.opts=list(width.cutoff=120),
+  tidy=TRUE, 
+  echo = FALSE,
+   dev = "svglite",
+      fig.ext = ".svg",
+  #cache = TRUE,
+  fig.align = "center",
+  fig.show = "hold",
+  fig.width=8, 
+  fig.asp=0.9,
+  out.width = "100%",
+  fig.path = "figures/",
+  fig.retina = 2,
+  fig.showtext = TRUE,
+  fig.pos = "t",
+  dpi = if (knitr::is_latex_output()) 72 else 300,
+  dev.args = list(png = list(type = "cairo-png")), 
+  optipng = "-o1 -quiet"
+)
+
+
+library(knitr)
+knitr::knit_hooks$set(optipng = hook_optipng)
+knitr::knit_hooks$set(pngquant = hook_pngquant)
+```
+
+```{r packages}
+librarian::shelf('tidyverse', 'readxl', 'kable', 'kableExtra', 'magrittr',  'glue', 'reactable', 'gt')
+```
+
+```{r data}
+wdi <- haven::read_dta('data/inequality.dta')
+```
+
+## Part A
+First, start with similar metrics to what you worked with in the past problem set. Calculate the mean, median, 25th percentile value, and 75th percentile value for GDP per capita (PPP-adjusted) in 2017, using the WDI data. What does the fact that the mean is higher than the median tells us about the international distribution of per capita output?
+
+There are several ways of answering this question.
+
+1.  Using the `stats` package we could do:
+
+    ```{r, echo  = TRUE}
+     stats::fivenum(wdi$gdppc2017) 
+    ```
+
+2.  With `dplyr` we have several options. The most straightforward but most verbose way would be to use `summarise()` and apply the functions to `gdppc2017` individually
+```{r, echo = TRUE}
+wdi %>% 
+  summarize(Min = min(gdppc2017, na.rm = TRUE),
+            Q1 = quantile(gdppc2017, .25, na.rm = TRUE),
+            Avg_gdppc2017 = mean(gdppc2017, na.rm =  TRUE), 
+            Q3 = quantile(gdppc2017, .75, na.rm = TRUE),
+            Max = max(gdppc2017, na.rm = TRUE)
+  ) %>% 
+  gt()
+```
+We can do the same thing more efficiently  using `across()`.
+
+```{r}
+wdi %>% 
+  summarize(across(.cols  = gdppc2017,
+                   # Use min, quantile (twice), mean, and max
+                   # Note: since we're using two different quantile values we can                     use lamda style functions with ~ to gain more control over the                     arguments.
+                   .fns = list(Min = min,
+                               Q1 = ~ quantile(., 0.25, na.rm = TRUE),
+                               Average = mean,
+                               Q3   = ~ quantile(., 0.75, na.rm = TRUE),
+                               Max = max ),
+                   na.rm = TRUE)) %>% 
+  gt()
+```
+
+If we wanted to extend this five number summary to all the numeric variables we could use `tidyr::pivot_longer()` and `dplyr::across()` together.
+
+```{r}
+wdi %>% 
+  pivot_longer(-country) %>% 
+  group_by(name) %>% 
+    summarize(across(.cols  = value,
+                   # Use min, quantile (twice), mean, and max
+                   # Note: since we're using two different quantile values we can                     use lamda style functions with ~ to gain more control over the                     arguments.
+                   .fns = list(Min = min,
+                               Q1 = ~ quantile(., 0.25, na.rm = TRUE),
+                               Average = mean,
+                               Q3   = ~ quantile(., 0.75, na.rm = TRUE),
+                               Max = max ),
+                   na.rm = TRUE,
+              .names  = '{.fn}')) %>% 
+  kbl(digits=1) %>% 
+  kable_styling()
+```
+
+
+(b) Inequality measures are a useful way to capture and compare information about the nature of a distribution in a single value. The inequality measure you are likely most familiar with is the Gini coefficient, which is commonly used to measure within-country inequality. The Theil index is one that can be used to measure inequality across countries. Using the dineq R package, calculate the Theil index for 1992 and 2017, based on PPP-adjusted GDP per capita. Has "international inequality" risen or fallen in the past 25 years?
+
+```{r}
+librarian::shelf('dineq')
+
+wdi %>% 
+  summarise(across(starts_with('gdppc'),
+                ~ dineq::theil.wtd(.x))) %>% 
+  kbl(digits = 2) %>% 
+  kable_styling()
+
+```
+
+Therefore, international inequality has fallen over the  last 25 years.
+
+(c) Now, let's add weights to the countries in our dataset. Calculate the population-weighted Theil index for 1992 and 2017 based on PPP-adjusted GDP per capita. How do your results change compared to the unweighted values, and why?
+
+```{r weights}
+variables <- c("pop1992",  "pop2017", "gdppc1992", "gdppc2017")
+wdi %>% 
+  pivot_longer(cols = all_of(variables),
+               names_to =  c('.value', 'year'),
+               names_pattern = "(.*)([0-9]{4})") %>% 
+  group_by(year) %>% 
+  summarise(gdppc_weighted_theil = dineq::theil.wtd(gdppc, pop)) %>% 
+  kbl(digits = 2) %>% 
+  kable_styling()
+```
+
+(d) Now explore the Gini variable in the dataset. List the highest countries with the 3 highest and 3 lowest Gini scores. Also, find the mean and median of these values, and note any broad patterns you see browsing through.
+
+The countries with the three highest Gini coefficients are `r wdi %>% summarise(country, gini) %>% arrange(desc(gini)) %>% head(3) %>% pull(country)` while the countries with the three lowest Gini coefficients are `r wdi %>% summarise(country, gini) %>%  drop_na(gini) %>%  labelled::remove_labels() %>% arrange(desc(gini)) %>% tail(3) %>% pull(country)`
+
+```{r gini}
+
+wdi %>% 
+  summarise(across(.cols  = gini,
+                   .fns = list(Mean = mean, Median = median),
+                   na.rm = TRUE,
+                   .names = "{.fn}_{.col}")) %>% 
+  kbl(digits = 1) %>% 
+  kable_styling()
+
+```
+
+```{r giniplot}
+wdi %>% 
+  ggplot(aes(x = gdppc2017, y = gini)) +
+  geom_point() +
+  geom_smooth(method  =  'loess') +
+  ggthemes::theme_hc()
+```
+
+(f) Define as "corrupt" as a country that is in the group of the 20% most corrupt countries, and as "highly unequal" a country that has a Gini coefficient greater than 40. Using those binary classifications in a cross-tab, calculate P(corrupt \| highly unequal) and P(highly unequal \| corrupt) and explain the difference between these two conditional probabilities to someone intelligent but not well versed in statistics.
+
+First, define the thresholds.
+
+```{r binary, echo = TRUE}
+binary_wdi <- 
+  wdi %>% 
+  mutate(corrupt = if_else(corruption > quantile(corruption, 0.2, na.rm = TRUE),
+                                                 'Corrupt',
+                                                 'Not corrupt'),
+         unequal = if_else(gini > 40,  
+                           'Highly unequal',
+                           'Not highly unequal'),
+         country,
+         .keep = 'used')
+```
+
+We can get the contingencies in two steps:
+```{r, echo = TRUE}
+binary_wdi %>% 
+  drop_na(unequal, corrupt) %>% 
+  filter(corrupt == 'Corrupt') %>% 
+  count(unequal) %>% 
+  mutate(prop = n / sum(n, na.rm  = TRUE)) %>% 
+  gt()
+
+```
+
+```{r, echo = TRUE}
+binary_wdi %>% 
+  drop_na(unequal, corrupt) %>% 
+  filter(unequal == 'Highly unequal') %>% 
+  count(corrupt) %>% 
+  mutate(prop = n / sum(n, na.rm  = TRUE))  %>% 
+  gt()
+```
+
+Or  we could  calculate all the contingencies in one step
+```{r, echo = TRUE}
+binary_wdi %>% 
+  drop_na(unequal, corrupt) %>% 
+  group_by(corrupt, unequal) %>% 
+  count() %>% 
+  group_by(corrupt) %>% 
+  mutate(unequal_given_corrupt = n / sum(n, na.rm = TRUE)) %>% 
+  group_by(unequal) %>% 
+  mutate(corrupt_given_unequal = n / sum(n, na.rm = TRUE)) %>% 
+  gt()
+```
+
+
+```{r}
+wdi %>% 
+  summarise(mean_5b = mean(gdppc1992, na.rm= TRUE))
+``
+
