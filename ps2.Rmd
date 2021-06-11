@@ -1,6 +1,6 @@
 ---
 title: "PS2"
-author: "Manuel Alcalá Kovalski assisted by Dan Levy"
+author: "Manuel Alcalá Kovalski assisted by Dan Levy!"
 date: "`r Sys.Date()`"
 output:
   prettydoc::html_pretty:
