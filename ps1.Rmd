@@ -1,6 +1,6 @@
 ---
 title: "Problem Set 1"
-author: "Manuel Alcala Kovalski"
+author: "Manuel Alcala Kovalski assisted by Dan Levy"
 date: "`r Sys.Date()`"
 output:
   prettydoc::html_pretty:
