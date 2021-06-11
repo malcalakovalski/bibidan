@@ -46,7 +46,6 @@ knitr::knit_hooks$set(optipng = hook_optipng)
 knitr::knit_hooks$set(pngquant = hook_pngquant)
 ```
 
-## Adding a title
 ```{r packages}
 librarian::shelf('tidyverse', 'readxl', 'kable', 'kableExtra', 'magrittr',  'glue', 'reactable', 'gt')
 ```
